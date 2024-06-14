@@ -1,0 +1,347 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
+#include <RTClib.h>
+#include <Servo.h>
+#include <EEPROM.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
+
+Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+RTC_DS3231 rtc;
+Servo myservo;
+
+bool greeted = false;  // Flag to keep track of whether the greeting has been displayed
+
+const int buttonAlarmSelectPin = 0; // Button pin to select between Alarm 1 and Alarm 2
+const int buttonHourChangePinUP = 1;
+const int buttonHourChangePinDOWN = 2;  // Button pin to change the hour of the selected alarm
+const int buttonMinuteChangePinUP = 4; // Button pin to change the minute of the selected alarm
+const int buttonMinuteChangePinDOWN = 7;
+
+
+// Alarm 1 settings
+int alarm1Hour = EEPROM.read(0);
+int alarm1Minute = EEPROM.read(2);
+int alarm1Second = 1;
+bool alarm1Enabled = false;
+
+// Alarm 2 settings
+int alarm2Hour = EEPROM.read(1);
+int alarm2Minute = EEPROM.read(3);
+bool alarm2Enabled = false;
+
+void setup() {
+
+  pinMode(buttonAlarmSelectPin, INPUT_PULLUP);
+  pinMode(buttonHourChangePinUP, INPUT_PULLUP);
+  pinMode(buttonMinuteChangePinUP, INPUT_PULLUP);
+  pinMode(buttonHourChangePinDOWN, INPUT_PULLUP);
+  pinMode(buttonMinuteChangePinDOWN, INPUT_PULLUP);
+
+
+
+  Wire.begin();
+  display.begin(SCREEN_ADDRESS, false);
+  rtc.begin();
+
+  if (rtc.lostPower()) {
+  rtc.adjust(DateTime(F(_DATE), F(TIME_)));
+  }
+
+  // Display greeting message only once at the start
+  displayGreeting();
+  
+}
+
+void loop() {
+   DateTime now = rtc.now();
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+
+  display.setCursor(35, 0);
+  display.print(now.day(), DEC);
+  display.print('/');
+  display.print(now.month(), DEC);
+  display.print('/');
+  display.print(now.year(), DEC);
+  display.println("  ");
+
+  display.setTextSize(2);
+  display.setCursor(15, 15);
+  display.print(now.hour(), DEC);
+  display.print(':');
+  display.print(now.minute(), DEC);
+  display.print(':');
+  display.println(now.second(), DEC);
+
+  display.setTextSize(1);
+  display.setCursor(0, 37);
+  display.print("Rightslot Alarm:");
+  display.print(alarm1Hour);
+  display.print(':');
+  display.println(alarm1Minute);
+
+
+  display.setCursor(0, 47);
+  display.print("Left-slot Alarm:");
+  display.print(alarm2Hour);
+  display.print(':');
+  display.print(alarm2Minute);
+
+  display.display();
+
+  if (now.hour() == alarm1Hour && now.minute() == alarm1Minute && now.second() == alarm1Second) {
+    Alarm();
+    myservoright();
+  
+  }
+
+  // Check if Alarm 2 is enabled and if the current time matches it
+  if (now.hour() == alarm2Hour && now.minute() == alarm2Minute && now.second() == alarm1Second) {
+    Alarm();
+    myservoleft();
+  
+  }
+
+  // Check for button presses
+  if (digitalRead(buttonAlarmSelectPin) == LOW) {
+    // Switch between Alarm 1 and Alarm 2
+    toggleAlarm();
+    delay(100); // Debounce
+  }
+
+  if (digitalRead(buttonHourChangePinUP) == LOW) {
+    // Increment hour for the selected alarm
+    changeHourUP();
+    delay(100); // Debounce
+  }
+
+  if (digitalRead(buttonMinuteChangePinUP) == LOW) {
+    // Increment minute for the selected alarm
+    changeMinuteUP();
+    delay(100); // Debounce
+  }
+
+  if (digitalRead(buttonHourChangePinDOWN) == LOW) {
+    // Increment hour for the selected alarm
+    changeHourDOWN();
+    delay(100); // Debounce
+  }
+
+  if (digitalRead(buttonMinuteChangePinDOWN) == LOW) {
+    // Increment minute for the selected alarm
+    changeMinuteDOWN();
+    delay(100); // Debounce
+  }
+}
+
+
+void displayGreeting() {
+  if (!greeted) {  // Check if greeting has not been displayed yet
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(1);
+    display.setCursor(35, 0);
+    display.println("WELCOME");
+    display.setCursor(38, 13);
+    display.println("TO THE");
+    display.setCursor(15, 26);
+    display.println("PILL DISPENSING");
+    display.setCursor(5, 39);
+    display.print("MEDICINE ASSISTANT");
+    display.display();
+    delay(3000);
+
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("Presented by,");
+    display.setCursor(5, 12);
+    display.println("Ishita Jaiswal");
+    display.setCursor(5, 24);
+    display.println("Labdhie Bendey");
+    display.setCursor(5, 36);
+    display.println("Ganesh Moroliya");
+    display.setCursor(5, 48);
+    display.println("Hemant Paunikar");
+    display.display();
+    delay(3000);
+
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("Guided by,");
+    display.setCursor(5, 15);
+    display.println("Prof. Vipul Lande");
+    display.display();
+    delay(2000);
+
+
+    greeted = true;  // Set the flag to true after displaying the greeting
+  }
+}
+
+void myservoright() {
+  myservo.attach(10);
+  myservo.write(10);  // tell servo to go to position
+  delay(1000);        // waits 15 ms for the servo to reach the position
+  myservo.write(60);
+  delay(1000);  // tell servo to go to position in variable 'pos'      // waits 15 ms for the servo to reach the position
+}
+
+
+void myservoleft() {
+  myservo.attach(11);
+  myservo.write(65);  // tell servo to go to position in variable 'pos'
+  delay(1000);        // waits 15 ms for the servo to reach the position
+  myservo.write(23);  // tell servo to go to position in variable 'pos'        // waits 15 ms for the servo to reach the position
+  delay(1000);
+}
+
+
+void Alarm() {
+ pinMode(12,OUTPUT);
+ digitalWrite(12,HIGH);
+ delay(5000);
+ digitalWrite(12,LOW);
+}
+
+
+void toggleAlarm() {
+  if (alarm1Enabled) {
+    alarm1Enabled = false;
+    alarm2Enabled = true;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(1);
+    display.setCursor(15, 26);
+    display.println("Alarm 2 selected");
+    display.display();
+    delay(500);
+
+  } else {
+    alarm1Enabled = true;
+    alarm2Enabled = false;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(1);
+    display.setCursor(15, 26);
+    display.println("Alarm 1 selected");
+    display.display();
+    delay(500);
+  
+  }
+}
+
+void changeHourUP() {
+  if (alarm1Enabled) {
+    alarm1Hour = (alarm1Hour + 1) % 24;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45,20);
+    display.println(alarm1Hour);
+    display.display();
+    EEPROM.write(0, alarm1Hour);
+    delay(500);
+  
+  } else if (alarm2Enabled) {
+    alarm2Hour = (alarm2Hour + 1) % 24;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm2Hour);
+    display.display();
+    EEPROM.write(1, alarm2Hour);
+    delay(500);
+  
+  }
+}
+
+void changeHourDOWN() {
+  if (alarm1Enabled) {
+    alarm1Hour = (alarm1Hour - 1 + 24) % 24;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm1Hour);
+    display.display();
+    EEPROM.write(0, alarm1Hour);
+    delay(500);
+  
+  } else if (alarm2Enabled) {
+    alarm2Hour = (alarm2Hour - 1 + 24) % 24;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm2Hour);
+    display.display();
+    EEPROM.write(1, alarm2Hour);
+    delay(500);
+
+  
+  }
+}
+
+void changeMinuteUP() {
+  if (alarm1Enabled) {
+    alarm1Minute = (alarm1Minute + 1) % 60;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm1Minute);
+    display.display();
+    EEPROM.write(2, alarm1Minute);
+    delay(300);
+    
+  } else if (alarm2Enabled) {
+    alarm2Minute = (alarm2Minute + 1) % 60;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm2Minute);
+    display.display();
+    EEPROM.write(3, alarm2Minute);
+    delay(300);
+    
+  }
+  }
+
+
+  void changeMinuteDOWN() {
+  if (alarm1Enabled) {
+    alarm1Minute = (alarm1Minute - 1 + 60) % 60;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm1Minute);
+    display.display();
+    EEPROM.write(2, alarm1Minute);
+    delay(300);
+    
+  } else if (alarm2Enabled) {
+    alarm2Minute = (alarm2Minute - 1 + 60) % 60;
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(2);
+    display.setCursor(45, 20);
+    display.println(alarm2Minute);
+    display.display();
+    EEPROM.write(3, alarm2Minute);
+    delay(300);
+    
+  }}
